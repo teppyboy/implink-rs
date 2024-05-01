@@ -1,7 +1,8 @@
 #![feature(absolute_path)]
 use clap::Parser;
 use fs_extra::{dir, file, file::move_file_with_progress};
-use std::fs::{create_dir_all, remove_dir_all, remove_file, rename};
+use std::fs::{create_dir_all, remove_dir_all, remove_file, rename, write};
+use serde::{Deserialize, Serialize};
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::fs::symlink;
 #[cfg(target_os = "windows")]
@@ -26,11 +27,23 @@ struct Args {
     #[arg(short, long)]
     move_and_link: bool,
     /// Generate a mapping file
-    #[arg(short, long, default_value_t = String::from("implink-mapping.json"))]
-    generate_mapping: String,
+    #[arg(short, long)]
+    generate_mapping: Option<String>,
     /// Restore mapping from a file
     #[arg(short, long)]
     restore_mapping: Option<String>,
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Mapping {
+    src: String,
+    dst: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct MappingFile {
+    mapping: Vec<Mapping>,
 }
 
 fn clear_last_line() {
@@ -237,6 +250,20 @@ fn make_symlink(
     Ok(())
 }
 
+fn generate_mapping(src: &PathBuf, dst: &PathBuf, out_file: &String) {
+    println!("Generating mapping file...");
+    let mapping = Mapping {
+        src: src.to_str().unwrap().to_string(),
+        dst: dst.to_str().unwrap().to_string(),
+    };
+    let mapping_file = MappingFile {
+        mapping: vec![mapping],
+    };
+    let json = serde_json::to_string_pretty(&mapping_file).unwrap();
+    write(out_file, json).unwrap();
+    println!("Mapping file has been written to '{}'.", out_file);
+}
+
 fn main() {
     println!(
         "implink-rs v{} - https://github.com/teppyboy/implink-rs",
@@ -273,5 +300,8 @@ fn main() {
                 return;
             }
         }
+    }
+    if !args.generate_mapping.is_none() {
+        generate_mapping(&src, &dst, &args.generate_mapping.unwrap());
     }
 }
