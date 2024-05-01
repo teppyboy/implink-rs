@@ -11,7 +11,7 @@ Run `implink -h`
 ## Installation
 
 ```
-cargo install --git https://github.com/teppyboy/implink
+cargo install --git https://github.com/teppyboy/implink-rs
 ```
 
 ## License
