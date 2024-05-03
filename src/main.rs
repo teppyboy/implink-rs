@@ -1,13 +1,16 @@
 #![feature(absolute_path)]
 use clap::Parser;
 use fs_extra::{dir, file, file::move_file_with_progress};
-use std::fs::{create_dir_all, remove_dir_all, remove_dir, remove_file, rename, write};
 use serde::{Deserialize, Serialize};
+use std::fs::{
+    create_dir_all, read_to_string, remove_dir, remove_dir_all, remove_file, rename, write,
+};
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::fs::symlink;
 #[cfg(target_os = "windows")]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{absolute, PathBuf};
+use terminal_size::terminal_size;
 
 /// File symlinking made easy.
 #[derive(Parser, Debug)]
@@ -34,11 +37,12 @@ struct Args {
     restore_mapping: Option<String>,
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 struct Mapping {
     src: String,
     dst: String,
+    force: bool,
+    junction: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -48,10 +52,12 @@ struct MappingFile {
 
 fn clear_last_line() {
     // This "works" apparently.
-    print!("\r");
-    let a = " ".repeat(86);
-    print!("{}", a);
-    print!("\r");
+    let width = match terminal_size() {
+        Some((w, _)) => w.0 as usize,
+        // Fallback to 86 if terminal size is not available
+        None => 86,
+    };
+    print!("\r{}\r", " ".repeat(width));
 }
 
 /// Actual symlink implementation for Windows
@@ -256,11 +262,19 @@ fn make_symlink(
     Ok(())
 }
 
-fn generate_mapping(src: &PathBuf, dst: &PathBuf, out_file: &String) {
+fn generate_mapping(
+    src: &PathBuf,
+    dst: &PathBuf,
+    force: bool,
+    use_junction: bool,
+    out_file: &String,
+) {
     println!("Generating mapping file...");
     let mapping = Mapping {
         src: src.to_str().unwrap().to_string(),
         dst: dst.to_str().unwrap().to_string(),
+        force: force,
+        junction: use_junction,
     };
     let mapping_file = MappingFile {
         mapping: vec![mapping],
@@ -270,12 +284,34 @@ fn generate_mapping(src: &PathBuf, dst: &PathBuf, out_file: &String) {
     println!("Mapping file has been written to '{}'.", out_file);
 }
 
+fn restore_mapping(file: &String) {
+    println!("Restoring mapping from file '{}'...", file);
+    let json = read_to_string(file).unwrap();
+    let mapping_file: MappingFile = serde_json::from_str(&json).unwrap();
+    for mapping in mapping_file.mapping {
+        let src = PathBuf::from(mapping.src);
+        let dst = PathBuf::from(mapping.dst);
+        match make_symlink(&src, &dst, mapping.force, mapping.junction) {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("{}", e);
+                return;
+            }
+        }
+    }
+    println!("Mapping has been restored.");
+}
+
 fn main() {
     println!(
         "implink-rs v{} - https://github.com/teppyboy/implink-rs",
         env!("CARGO_PKG_VERSION")
     );
     let args = Args::parse();
+    if args.restore_mapping.is_some() {
+        restore_mapping(&args.restore_mapping.unwrap());
+        return;
+    }
     if args.src.is_none() || args.dst.is_none() {
         println!("Usage: implink <SRC> <DST>");
         println!("Execute 'implink --help' for more information.");
@@ -298,6 +334,15 @@ fn main() {
                 return;
             }
         }
+        if !args.generate_mapping.is_none() {
+            generate_mapping(
+                &dst,
+                &src,
+                args.force,
+                args.junction,
+                &args.generate_mapping.unwrap(),
+            );
+        }
     } else {
         match make_symlink(&src, &dst, args.force, args.junction) {
             Ok(_) => {}
@@ -306,8 +351,14 @@ fn main() {
                 return;
             }
         }
-    }
-    if !args.generate_mapping.is_none() {
-        generate_mapping(&src, &dst, &args.generate_mapping.unwrap());
+        if !args.generate_mapping.is_none() {
+            generate_mapping(
+                &src,
+                &dst,
+                args.force,
+                args.junction,
+                &args.generate_mapping.unwrap(),
+            );
+        }
     }
 }
