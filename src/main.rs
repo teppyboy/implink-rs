@@ -201,34 +201,35 @@ fn make_symlink(
         if !force {
             match remove_dir(dst) {
                 Ok(_) => (),
-                Err(e) => {
+                Err(_) => {
                     return Err(format!(
                         "Destination file or directory '{}' already exists",
                         dst.display()
                     ));
                 }
             }
-        }
-        if dst.is_file() {
-            match remove_file(dst) {
-                Ok(_) => (),
-                Err(e) => {
-                    return Err(format!(
-                        "Failed to remove destination file '{}': {}",
-                        dst.display(),
-                        e
-                    ))
-                }
-            }
         } else {
-            match remove_dir_all(dst) {
-                Ok(_) => (),
-                Err(e) => {
-                    return Err(format!(
-                        "Failed to remove destination directory '{}': {}",
-                        dst.display(),
-                        e
-                    ))
+            if dst.is_file() {
+                match remove_file(dst) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to remove destination file '{}': {}",
+                            dst.display(),
+                            e
+                        ))
+                    }
+                }
+            } else {
+                match remove_dir_all(dst) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to remove destination directory '{}': {}",
+                            dst.display(),
+                            e
+                        ))
+                    }
                 }
             }
         }
