@@ -1,7 +1,7 @@
 #![feature(absolute_path)]
 use clap::Parser;
 use fs_extra::{dir, file, file::move_file_with_progress};
-use std::fs::{create_dir_all, remove_dir_all, remove_file, rename, write};
+use std::fs::{create_dir_all, remove_dir_all, remove_dir, remove_file, rename, write};
 use serde::{Deserialize, Serialize};
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::fs::symlink;
@@ -199,10 +199,15 @@ fn make_symlink(
     }
     if dst.exists() {
         if !force {
-            return Err(format!(
-                "Destination file or directory '{}' already exists",
-                dst.display()
-            ));
+            match remove_dir(dst) {
+                Ok(_) => (),
+                Err(e) => {
+                    return Err(format!(
+                        "Destination file or directory '{}' already exists",
+                        dst.display()
+                    ));
+                }
+            }
         }
         if dst.is_file() {
             match remove_file(dst) {
