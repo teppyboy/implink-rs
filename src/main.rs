@@ -74,7 +74,7 @@ fn _make_symlink(src: &PathBuf, dst: &PathBuf, use_junction: bool) -> Result<(),
 
 /// Actual symlink implementation for other platforms
 #[cfg(not(target_os = "windows"))]
-fn _make_symlink(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
+fn _make_symlink(src: &PathBuf, dst: &PathBuf) -> Result<(), std::io::Error> {
     symlink(src, dst)
 }
 
