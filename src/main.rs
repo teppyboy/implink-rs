@@ -1,4 +1,3 @@
-#![feature(absolute_path)]
 use clap::Parser;
 use fs_extra::{dir, file, file::move_file_with_progress};
 use serde::{Deserialize, Serialize};
@@ -195,7 +194,7 @@ fn make_symlink(
     src: &PathBuf,
     dst: &PathBuf,
     force: bool,
-    use_junction: bool,
+    _use_junction: bool,
 ) -> Result<(), String> {
     if !src.exists() {
         return Err(format!(
@@ -203,7 +202,23 @@ fn make_symlink(
             src.display()
         ));
     }
-    if dst.exists() {
+    let dst_exists: bool;
+    match dst.try_exists() {
+        Ok(result) => {
+            dst_exists = result;
+        },
+        Err(e) => {
+            if !force {
+                return Err(format!(
+                    "Failed to check destination file or directory '{}': {}",
+                    dst.display(),
+                    e
+                ))
+            }
+            dst_exists = true;
+        }
+    } 
+    if dst_exists {
         if !force {
             match remove_dir(dst) {
                 Ok(_) => (),
@@ -241,7 +256,7 @@ fn make_symlink(
         }
     }
     #[cfg(target_os = "windows")]
-    let result = _make_symlink(src, dst, use_junction);
+    let result = _make_symlink(src, dst, _use_junction);
     #[cfg(not(target_os = "windows"))]
     let result = _make_symlink(src, dst);
     match result {
