@@ -73,7 +73,7 @@ fn _make_symlink(src: &PathBuf, dst: &PathBuf, use_junction: bool) -> Result<(),
 
 /// Actual symlink implementation for other platforms
 #[cfg(not(target_os = "windows"))]
-fn _make_symlink(src: &PathBuf, dst: &PathBuf) -> Result<(), std::io::Error> {
+fn _make_symlink(src: &PathBuf, dst: &PathBuf, _: bool) -> Result<(), std::io::Error> {
     symlink(src, dst)
 }
 
@@ -190,6 +190,32 @@ fn move_file_or_directory(src: &PathBuf, dst: &PathBuf, force: bool) -> Result<(
     Ok(())
 }
 
+fn rm_rf(dst: &PathBuf) -> Result<(), String> {
+    if dst.is_file() {
+        match remove_file(dst) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                return Err(format!(
+                    "Failed to remove destination file '{}': {}",
+                    dst.display(),
+                    e
+                ))
+            }
+        }
+    } else {
+        match remove_dir_all(dst) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                return Err(format!(
+                    "Failed to remove destination directory '{}': {}",
+                    dst.display(),
+                    e
+                ))
+            }
+        }
+    }
+}
+
 fn make_symlink(
     src: &PathBuf,
     dst: &PathBuf,
@@ -230,43 +256,42 @@ fn make_symlink(
                 }
             }
         } else {
-            if dst.is_file() {
-                match remove_file(dst) {
-                    Ok(_) => (),
-                    Err(e) => {
-                        return Err(format!(
-                            "Failed to remove destination file '{}': {}",
-                            dst.display(),
-                            e
-                        ))
-                    }
-                }
-            } else {
-                match remove_dir_all(dst) {
-                    Ok(_) => (),
-                    Err(e) => {
-                        return Err(format!(
-                            "Failed to remove destination directory '{}': {}",
-                            dst.display(),
-                            e
-                        ))
-                    }
-                }
-            }
+            rm_rf(dst).unwrap();
         }
     }
-    #[cfg(target_os = "windows")]
     let result = _make_symlink(src, dst, _use_junction);
-    #[cfg(not(target_os = "windows"))]
-    let result = _make_symlink(src, dst);
     match result {
         Ok(_) => (),
         Err(e) => {
-            return Err(format!(
-                "Failed to create symlink '{}': {}",
-                dst.display(),
-                e
-            ))
+            if !force {
+                return Err(format!(
+                    "Failed to create symlink '{}': {}",
+                    dst.display(),
+                    e
+                ));
+            }
+            // Workaround :)
+            println!("Error: {}", e);
+            print!("Trying to remove destination file or directory '{}'... ", dst.display());
+            match rm_rf(dst) {
+                Ok(_) => {
+                    println!("OK");
+                },
+                Err(e) => {
+                    println!("FAILED");
+                    println!("Failed to remove destination file or directory '{}': {}", dst.display(), e);
+                }
+            }
+            match _make_symlink(src, dst, _use_junction) {
+                Ok(_) => (),
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to create symlink '{}': {}",
+                        dst.display(),
+                        e
+                    ));
+                }
+            }
         }
     }
     println!(
