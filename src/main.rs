@@ -9,6 +9,8 @@ use std::os::unix::fs::symlink;
 #[cfg(target_os = "windows")]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{absolute, PathBuf};
+#[cfg(target_os = "windows")]
+use std::process::Command;
 use terminal_size::terminal_size;
 
 /// File symlinking made easy.
@@ -191,29 +193,57 @@ fn move_file_or_directory(src: &PathBuf, dst: &PathBuf, force: bool) -> Result<(
 }
 
 fn rm_rf(dst: &PathBuf) -> Result<(), String> {
+    let mut result: Result<(), String>;
     if dst.is_file() {
         match remove_file(dst) {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                result = Ok(());
+            },
             Err(e) => {
-                return Err(format!(
+                result = Err(format!(
                     "Failed to remove destination file '{}': {}",
                     dst.display(),
                     e
-                ))
+                ));
             }
         }
     } else {
         match remove_dir_all(dst) {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                result = Ok(());
+            },
             Err(e) => {
-                return Err(format!(
+                result = Err(format!(
                     "Failed to remove destination directory '{}': {}",
                     dst.display(),
                     e
-                ))
+                ));
             }
         }
     }
+    // I do love Windows bro ("truly" :D)
+    // Fallback to "del" command which works on Windows :D
+    // del documentation: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/del
+    #[cfg(target_os = "windows")]
+    {
+        if result.is_err() {
+            // This should be equivalent to "rm -rf" on Unix-like systems
+            let command = Command::new("cmd").args(["/C", "del", "/f", "/q", "/s", dst.to_str().unwrap()]);
+            match command.output() {
+                Ok(output) => {
+                    result = Ok(());
+                },
+                Err(e) => {
+                    result = Err(format!(
+                        "Failed to remove destination file or directory '{}': {}",
+                        dst.display(),
+                        e
+                    ));
+                }
+            }
+        }
+    }
+    return result;
 }
 
 fn make_symlink(
@@ -280,6 +310,12 @@ fn make_symlink(
                 Err(e) => {
                     println!("FAILED");
                     println!("Failed to remove destination file or directory '{}': {}", dst.display(), e);
+                    // Return because we can't even remove the destination
+                    return Err(format!(
+                        "Failed to create symlink '{}': {}",
+                        dst.display(),
+                        e
+                    ));
                 }
             }
             match _make_symlink(src, dst, _use_junction) {
