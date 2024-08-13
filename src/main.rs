@@ -228,9 +228,10 @@ fn rm_rf(dst: &PathBuf) -> Result<(), String> {
     {
         if result.is_err() {
             // This should be equivalent to "rm -rf" on Unix-like systems
-            let command = Command::new("cmd").args(["/C", "del", "/f", "/q", "/s", dst.to_str().unwrap()]);
+            let mut command = Command::new("cmd");
+            command.args(["/C", "del", "/f", "/q", "/s", dst.to_str().unwrap()]);
             match command.output() {
-                Ok(output) => {
+                Ok(_) => {
                     result = Ok(());
                 },
                 Err(e) => {
